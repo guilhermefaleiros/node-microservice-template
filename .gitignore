@@ -1,0 +1,5 @@
+node_modules/
+dist/
+elasticsearch_data/
+infrastructure/terraform/.terraform/
+infrastructure/terraform/.terraform.lock.hcl

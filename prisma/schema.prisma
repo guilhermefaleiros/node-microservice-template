@@ -1,0 +1,29 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["interactiveTransactions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Users {
+  id         String   @id
+  name       String
+  cpf        String
+  created_at DateTime @default(now())
+
+  @@map("users")
+}
+
+model Events {
+  id         String   @id
+  name       String
+  payload    String
+  handled    Boolean
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("events")
+}

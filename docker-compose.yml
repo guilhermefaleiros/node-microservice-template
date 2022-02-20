@@ -1,0 +1,125 @@
+version: "3.6"
+services:
+  jaeger:
+    image: jaegertracing/all-in-one
+    ports:
+      - 5775:5775/udp
+      - 6831:6831/udp
+      - 6832:6832/udp
+      - 5778:5778
+      - 16686:16686
+      - 14268:14268
+      - 14250:14250
+      - 9411:9411
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - kafka-network
+
+  kafka:
+    build: ./infrastructure/kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    command: sh start.sh
+    volumes:
+      - ./infrastructure/kafka:/scripts
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LISTENERS: INTERNAL://:9094,OUTSIDE://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9094,OUTSIDE://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,OUTSIDE:PLAINTEXT
+    networks:
+      - kafka-network
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop:3.28.0-SNAPSHOT
+    container_name: kafdrop
+    environment:
+      KAFKA_BROKERCONNECT: kafka:9094
+    ports:
+      - 9000:9000
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
+  redis:
+    container_name: redis
+    image: redis:5.0.3
+    ports:
+      - "6379:6379"
+  
+  postgres:
+    image: postgres:11-alpine
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_DB: template
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - database-data:/var/lib/postgresql/data
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.13.0
+    container_name: elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=es-docker-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - http.cors.enabled=true
+      - http.cors.allow-origin="*"
+      - discovery.type=single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks: 
+        - observability
+   
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.13.0
+    container_name: kibana
+    ports:
+      - 5601:5601
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+    networks: 
+        - observability
+        
+  apm:
+    image: docker.elastic.co/apm/apm-server-oss:7.13.0
+    container_name: apm
+    volumes:      
+    - ./infrastructure/apm/apm-server.yml:/usr/share/apm-server/apm-server.yml
+    ports:
+      - "8200:8200"
+    restart: on-failure
+    networks: 
+      - observability
+      
+networks:
+  kafka-network:
+    driver: bridge
+  observability:
+    external: true
+
+volumes:
+  database-data:
+    driver: "local"
